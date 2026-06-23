@@ -1,0 +1,19 @@
+syntax="proto3";
+
+package chat;
+
+option go_package="scratch-chat/proto;chat";
+
+message Request{
+    string client=1;
+    string text=2;
+}
+
+message Response{
+    string server=1;
+    string text=2;
+}
+
+service ChatService{
+    rpc StreamChat(stream Request) returns (stream Response);
+}
