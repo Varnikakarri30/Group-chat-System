@@ -3,6 +3,20 @@ let myUsername = "Varnikahh";
 let myPasskey = "secret123";
 let chatSSE = null;
 
+// Check URL query parameters for predefined room
+window.addEventListener('DOMContentLoaded', () => {
+    const params = new URLSearchParams(window.location.search);
+    if (params.has('room')) {
+        const roomVal = params.get('room');
+        if (roomVal) {
+            const passkeyInput = document.getElementById('passkey-input');
+            const usernameInput = document.getElementById('username-input');
+            if (passkeyInput) passkeyInput.value = roomVal;
+            if (usernameInput) usernameInput.focus();
+        }
+    }
+});
+
 // DOM Elements
 const setupScreen = document.getElementById('setup-screen');
 const workspaceScreen = document.getElementById('workspace-screen');
@@ -213,4 +227,49 @@ function escapeHTML(str) {
         .replace(/>/g, '&gt;')
         .replace(/"/g, '&quot;')
         .replace(/'/g, '&#039;');
+}
+
+// --- Generate Passkey Event Listener ---
+const btnGeneratePasskey = document.getElementById('btn-generate-passkey');
+if (btnGeneratePasskey) {
+    btnGeneratePasskey.addEventListener('click', () => {
+        const randomPasskey = generateRandomPasskey(8);
+        const passkeyInput = document.getElementById('passkey-input');
+        if (passkeyInput) {
+            passkeyInput.value = randomPasskey;
+        }
+    });
+}
+
+function generateRandomPasskey(length) {
+    const chars = 'abcdefghijklmnopqrstuvwxyz0123456789';
+    let result = '';
+    for (let i = 0; i < length; i++) {
+        result += chars.charAt(Math.floor(Math.random() * chars.length));
+    }
+    return result;
+}
+
+// --- Copy Invite Link Event Listener ---
+const btnCopyInvite = document.getElementById('btn-copy-invite');
+const copyBtnText = document.getElementById('copy-btn-text');
+if (btnCopyInvite) {
+    btnCopyInvite.addEventListener('click', async () => {
+        const inviteUrl = `${window.location.origin}/?room=${encodeURIComponent(myPasskey)}`;
+        try {
+            await navigator.clipboard.writeText(inviteUrl);
+            
+            if (copyBtnText) copyBtnText.textContent = "Copied!";
+            btnCopyInvite.style.borderColor = "var(--green)";
+            btnCopyInvite.style.color = "var(--green)";
+            
+            setTimeout(() => {
+                if (copyBtnText) copyBtnText.textContent = "Copy Invite";
+                btnCopyInvite.style.borderColor = "var(--border-color)";
+                btnCopyInvite.style.color = "var(--text-muted)";
+            }, 2000);
+        } catch (err) {
+            console.error("Failed to copy invite link:", err);
+        }
+    });
 }

@@ -688,3 +688,75 @@ body {
     opacity: 0.5;
     cursor: not-allowed;
 }
+
+/* Custom Passkey Input & Share Button Layouts */
+.input-with-button {
+    display: flex;
+    gap: 8px;
+    width: 100%;
+}
+
+.input-with-button input {
+    flex-grow: 1;
+}
+
+.btn-input-action {
+    background: rgba(255, 255, 255, 0.05);
+    border: 1px solid var(--border-color);
+    padding: 12px;
+    border-radius: 8px;
+    color: var(--text-muted);
+    cursor: pointer;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    transition: var(--transition-smooth);
+}
+
+.btn-input-action:hover {
+    background: rgba(168, 85, 247, 0.15);
+    border-color: var(--purple);
+    color: #ffffff;
+    box-shadow: 0 0 10px rgba(168, 85, 247, 0.25);
+}
+
+.btn-input-action:active {
+    transform: scale(0.95);
+}
+
+.action-icon {
+    width: 18px;
+    height: 18px;
+}
+
+.btn-icon-text {
+    background: rgba(255, 255, 255, 0.05);
+    border: 1px solid var(--border-color);
+    padding: 4px 10px;
+    border-radius: 6px;
+    color: var(--text-muted);
+    font-family: var(--font-outfit);
+    font-size: 12px;
+    font-weight: 600;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    transition: var(--transition-smooth);
+}
+
+.btn-icon-text:hover {
+    background: rgba(6, 182, 212, 0.15);
+    border-color: var(--cyan);
+    color: #ffffff;
+}
+
+.btn-icon-text:active {
+    transform: scale(0.97);
+}
+
+.copy-icon {
+    width: 14px;
+    height: 14px;
+}
+

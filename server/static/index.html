@@ -39,7 +39,14 @@
                     </div>
                     <div class="input-group">
                         <label for="passkey-input">Room Passkey</label>
-                        <input type="text" id="passkey-input" placeholder="e.g. secret123" value="secret123" required autocomplete="off">
+                        <div class="input-with-button">
+                            <input type="text" id="passkey-input" placeholder="e.g. secret123" value="secret123" required autocomplete="off">
+                            <button type="button" id="btn-generate-passkey" class="btn-input-action" title="Generate Random Passkey">
+                                <svg class="action-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                    <path d="M21 2l-2 2m-7.61 7.61a5.5 5.5 0 1 1-7.778 7.778 5.5 5.5 0 0 1 7.777-7.777zm0 0L15.5 7.5m0 0l3 3M15.5 7.5L19 4"></path>
+                                </svg>
+                            </button>
+                        </div>
                     </div>
                 </div>
 
@@ -59,6 +66,14 @@
             <header class="workspace-header glass-card">
                 <div class="brand">
                     <span class="badge-grpc" id="room-badge">ROOM: secret123</span>
+                    <button type="button" id="btn-copy-invite" class="btn-icon-text" title="Copy Invite Link">
+                        <svg class="copy-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                            <rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect>
+                            <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path>
+                        </svg>
+                        <span id="copy-btn-text">Copy Invite</span>
+                    </button>
+                    <div class="status-divider"></div>
                     <h2 id="user-badge">User: Varnikahh</h2>
                 </div>
                 <div class="status-panel">
