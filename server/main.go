@@ -12,8 +12,8 @@ import (
 	"net/http"
 	"os"
 	pb "scratch-chat/proto"
+	"strings"
 	"sync"
-	"time"
 
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
@@ -22,93 +22,81 @@ import (
 //go:embed static/*
 var staticFS embed.FS
 
-// ChatHub coordinates message routing between gRPC streams and Web HTTP/SSE connections
+// RoomMember represents a user connected to a specific room
+type RoomMember struct {
+	UserName string
+	SendChan chan *pb.Response
+}
+
+// ChatHub coordinates message routing by grouping active client streams into rooms
 type ChatHub struct {
-	mu                  sync.Mutex
-	serverWebChans      map[string][]chan *pb.Request
-	grpcServerSendChans map[string]chan *pb.Response
-	webClientSendChans  map[string]chan *pb.Request
+	mu                 sync.Mutex
+	rooms              map[string][]*RoomMember     // Key: Passkey, Value: active members in that room
+	webClientSendChans map[string]chan *pb.Request // Key: UserName + ":" + Passkey, Value: channel for POST -> gRPC relay
 }
 
 var hub = &ChatHub{
-	serverWebChans:      make(map[string][]chan *pb.Request),
-	grpcServerSendChans: make(map[string]chan *pb.Response),
-	webClientSendChans:  make(map[string]chan *pb.Request),
+	rooms:              make(map[string][]*RoomMember),
+	webClientSendChans: make(map[string]chan *pb.Request),
 }
 
-func (h *ChatHub) RegisterServerWeb(serverName string, ch chan *pb.Request) {
+func (h *ChatHub) RegisterMember(passkey string, userName string, sendChan chan *pb.Response) {
 	h.mu.Lock()
 	defer h.mu.Unlock()
-	h.serverWebChans[serverName] = append(h.serverWebChans[serverName], ch)
+	h.rooms[passkey] = append(h.rooms[passkey], &RoomMember{
+		UserName: userName,
+		SendChan: sendChan,
+	})
+	log.Printf("[ROOMS] User '%s' registered in room '%s'. Total members: %d", userName, passkey, len(h.rooms[passkey]))
 }
 
-func (h *ChatHub) UnregisterServerWeb(serverName string, ch chan *pb.Request) {
+func (h *ChatHub) UnregisterMember(passkey string, userName string, sendChan chan *pb.Response) {
 	h.mu.Lock()
 	defer h.mu.Unlock()
-	chans := h.serverWebChans[serverName]
-	for i, c := range chans {
-		if c == ch {
-			h.serverWebChans[serverName] = append(chans[:i], chans[i+1:]...)
+	members := h.rooms[passkey]
+	for i, m := range members {
+		if m.UserName == userName && m.SendChan == sendChan {
+			h.rooms[passkey] = append(members[:i], members[i+1:]...)
+			log.Printf("[ROOMS] User '%s' unregistered from room '%s'. Members left: %d", userName, passkey, len(h.rooms[passkey]))
 			break
 		}
 	}
-}
-
-func (h *ChatHub) BroadcastToServerWeb(req *pb.Request) {
-	h.mu.Lock()
-	defer h.mu.Unlock()
-	for _, chans := range h.serverWebChans {
-		for _, ch := range chans {
-			select {
-			case ch <- req:
-			default:
-			}
-		}
+	if len(h.rooms[passkey]) == 0 {
+		delete(h.rooms, passkey)
+		log.Printf("[ROOMS] Room '%s' is now empty and has been removed", passkey)
 	}
 }
 
-func (h *ChatHub) RegisterGrpcServerSend(clientName string, ch chan *pb.Response) {
+func (h *ChatHub) BroadcastToRoom(passkey string, res *pb.Response) {
 	h.mu.Lock()
 	defer h.mu.Unlock()
-	h.grpcServerSendChans[clientName] = ch
-}
-
-func (h *ChatHub) UnregisterGrpcServerSend(clientName string) {
-	h.mu.Lock()
-	defer h.mu.Unlock()
-	delete(h.grpcServerSendChans, clientName)
-}
-
-func (h *ChatHub) SendToGrpcClient(clientName string, res *pb.Response) bool {
-	h.mu.Lock()
-	defer h.mu.Unlock()
-	if ch, ok := h.grpcServerSendChans[clientName]; ok {
+	members := h.rooms[passkey]
+	log.Printf("[BROADCAST] Distributing message from '%s' to %d members in room '%s'", res.Server, len(members), passkey)
+	for _, m := range members {
 		select {
-		case ch <- res:
-			return true
+		case m.SendChan <- res:
 		default:
-			return false
+			// Non-blocking write to avoid hanging if one client is slow
 		}
 	}
-	return false
 }
 
-func (h *ChatHub) RegisterWebClientSend(clientName string, ch chan *pb.Request) {
+func (h *ChatHub) RegisterWebClientSend(key string, ch chan *pb.Request) {
 	h.mu.Lock()
 	defer h.mu.Unlock()
-	h.webClientSendChans[clientName] = ch
+	h.webClientSendChans[key] = ch
 }
 
-func (h *ChatHub) UnregisterWebClientSend(clientName string) {
+func (h *ChatHub) UnregisterWebClientSend(key string) {
 	h.mu.Lock()
 	defer h.mu.Unlock()
-	delete(h.webClientSendChans, clientName)
+	delete(h.webClientSendChans, key)
 }
 
-func (h *ChatHub) SendToGrpcStream(clientName string, req *pb.Request) bool {
+func (h *ChatHub) SendToGrpcStream(key string, req *pb.Request) bool {
 	h.mu.Lock()
 	defer h.mu.Unlock()
-	if ch, ok := h.webClientSendChans[clientName]; ok {
+	if ch, ok := h.webClientSendChans[key]; ok {
 		select {
 		case ch <- req:
 			return true
@@ -123,58 +111,68 @@ type server struct {
 	pb.UnimplementedChatServiceServer
 }
 
-// StreamChat is the bidirectional gRPC stream handler on the server
-func (s *server) StreamChat(stream pb.ChatService_StreamChatServer) error {
-	log.Println("New gRPC client connected to StreamChat")
+// parseClientIdentifier decodes username and passkey from the gRPC Client metadata field
+func parseClientIdentifier(clientField string) (string, string) {
+	parts := strings.SplitN(clientField, ":", 2)
+	if len(parts) == 2 {
+		return parts[0], parts[1]
+	}
+	return clientField, "default"
+}
 
-	var clientName string
+// StreamChat handles incoming bidirectional gRPC streams
+func (s *server) StreamChat(stream pb.ChatService_StreamChatServer) error {
+	log.Println("[gRPC] New stream connection established")
+
+	var userName string
+	var passkey string
 	var registered bool
 	sendChan := make(chan *pb.Response, 100)
 
 	defer func() {
-		if registered && clientName != "" {
-			hub.UnregisterGrpcServerSend(clientName)
-			log.Printf("gRPC client [%s] stream closed", clientName)
+		if registered && userName != "" && passkey != "" {
+			hub.UnregisterMember(passkey, userName, sendChan)
 		}
 	}()
 
-	// Read responses from web UI/terminal and write to the gRPC client stream
+	// Read responses from channel and write to the gRPC client stream
 	go func() {
 		for res := range sendChan {
 			if err := stream.Send(res); err != nil {
-				log.Printf("Error writing to gRPC stream: %v", err)
+				log.Printf("[gRPC] Write stream error for '%s': %v", userName, err)
 				return
 			}
 		}
 	}()
 
-	// Read requests from gRPC client stream
+	// Read requests from gRPC stream
 	for {
 		req, err := stream.Recv()
 		if err != nil {
-			log.Printf("Error reading from gRPC stream: %v", err)
+			log.Printf("[gRPC] Read stream disconnected: %v", err)
 			return err
 		}
 
-		// Register client send channel when we see the name for the first time
 		if !registered {
-			clientName = req.Client
-			hub.RegisterGrpcServerSend(clientName, sendChan)
+			userName, passkey = parseClientIdentifier(req.Client)
+			hub.RegisterMember(passkey, userName, sendChan)
 			registered = true
-			log.Printf("gRPC client [%s] registered in hub", clientName)
 		}
 
 		if req.Text != "" {
-			fmt.Printf("\n[%s]: %s\nServer > ", req.Client, req.Text)
+			fmt.Printf("\n[%s in %s]: %s\nServer > ", userName, passkey, req.Text)
 			os.Stdout.Sync()
-		}
 
-		// Broadcast request to web server panels
-		hub.BroadcastToServerWeb(req)
+			// Broadcast this message to all members in the same room
+			hub.BroadcastToRoom(passkey, &pb.Response{
+				Server: userName,
+				Text:   req.Text,
+			})
+		}
 	}
 }
 
-// Helper to configure SSE headers
+// Configure SSE headers
 func enableSSE(w http.ResponseWriter) {
 	w.Header().Set("Content-Type", "text/event-stream")
 	w.Header().Set("Cache-Control", "no-cache")
@@ -182,11 +180,12 @@ func enableSSE(w http.ResponseWriter) {
 	w.Header().Set("Access-Control-Allow-Origin", "*")
 }
 
-// clientEventsHandler handles SSE stream for Client Web Panel
-func clientEventsHandler(w http.ResponseWriter, r *http.Request) {
+// chatEventsHandler handles real-time message streaming (SSE) to the browser
+func chatEventsHandler(w http.ResponseWriter, r *http.Request) {
 	name := r.URL.Query().Get("name")
-	if name == "" {
-		http.Error(w, "name query parameter is required", http.StatusBadRequest)
+	passkey := r.URL.Query().Get("passkey")
+	if name == "" || passkey == "" {
+		http.Error(w, "name and passkey parameters are required", http.StatusBadRequest)
 		return
 	}
 
@@ -199,10 +198,10 @@ func clientEventsHandler(w http.ResponseWriter, r *http.Request) {
 	enableSSE(w)
 	flusher.Flush()
 
-	// Dial local gRPC server
+	// Dial gRPC server locally
 	conn, err := grpc.Dial("localhost:50051", grpc.WithTransportCredentials(insecure.NewCredentials()))
 	if err != nil {
-		log.Printf("Client SSE failed to connect to gRPC: %v", err)
+		log.Printf("[Web SSE] Connect to gRPC failed: %v", err)
 		return
 	}
 	defer conn.Close()
@@ -213,40 +212,45 @@ func clientEventsHandler(w http.ResponseWriter, r *http.Request) {
 
 	stream, err := client.StreamChat(ctx)
 	if err != nil {
-		log.Printf("Client SSE failed to open stream: %v", err)
+		log.Printf("[Web SSE] Start StreamChat failed: %v", err)
 		return
 	}
 
+	key := name + ":" + passkey
 	sendChan := make(chan *pb.Request, 100)
-	hub.RegisterWebClientSend(name, sendChan)
-	defer hub.UnregisterWebClientSend(name)
+	hub.RegisterWebClientSend(key, sendChan)
+	defer hub.UnregisterWebClientSend(key)
 
 	// Send initial empty message to trigger server registration of this client
 	err = stream.Send(&pb.Request{
-		Client: name,
+		Client: key,
 		Text:   "",
 	})
 	if err != nil {
-		log.Printf("Client SSE failed to send initial join: %v", err)
+		log.Printf("[Web SSE] Join message failed: %v", err)
 		return
 	}
 
-	// Goroutine to send messages from Web UI POSTs into gRPC client stream
+	// Read from POST send requests and push to gRPC
 	go func() {
 		for req := range sendChan {
 			if err := stream.Send(req); err != nil {
-				log.Printf("Error sending message to gRPC: %v", err)
+				log.Printf("[Web SSE] Send request failed: %v", err)
 				return
 			}
 		}
 	}()
 
-	// Read responses from gRPC stream and write to HTTP SSE stream
+	// Read from gRPC and stream to web SSE
 	for {
 		res, err := stream.Recv()
 		if err != nil {
-			log.Printf("Client SSE stream closed: %v", err)
+			log.Printf("[Web SSE] Stream closed: %v", err)
 			break
+		}
+
+		if res.Text == "" {
+			continue // Filter out empty join triggers
 		}
 
 		payload, err := json.Marshal(res)
@@ -262,16 +266,17 @@ func clientEventsHandler(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-// clientSendHandler forwards messages sent from Client Web Panel to gRPC
-func clientSendHandler(w http.ResponseWriter, r *http.Request) {
+// chatSendHandler receives chat text from the frontend POST request and forwards it to gRPC
+func chatSendHandler(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
 		http.Error(w, "POST required", http.StatusMethodNotAllowed)
 		return
 	}
 
 	var req struct {
-		Client string `json:"client"`
-		Text   string `json:"text"`
+		Name    string `json:"name"`
+		Passkey string `json:"passkey"`
+		Text    string `json:"text"`
 	}
 
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
@@ -279,102 +284,19 @@ func clientSendHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if req.Client == "" || req.Text == "" {
-		http.Error(w, "client and text required", http.StatusBadRequest)
+	if req.Name == "" || req.Passkey == "" || req.Text == "" {
+		http.Error(w, "name, passkey, and text are required", http.StatusBadRequest)
 		return
 	}
 
-	ok := hub.SendToGrpcStream(req.Client, &pb.Request{
-		Client: req.Client,
+	key := req.Name + ":" + req.Passkey
+	ok := hub.SendToGrpcStream(key, &pb.Request{
+		Client: key,
 		Text:   req.Text,
 	})
 
 	if !ok {
-		http.Error(w, "Client connection not active", http.StatusNotFound)
-		return
-	}
-
-	w.WriteHeader(http.StatusOK)
-}
-
-// serverEventsHandler handles SSE stream for Server Web Panel
-func serverEventsHandler(w http.ResponseWriter, r *http.Request) {
-	name := r.URL.Query().Get("name")
-	if name == "" {
-		http.Error(w, "name query parameter is required", http.StatusBadRequest)
-		return
-	}
-
-	flusher, ok := w.(http.Flusher)
-	if !ok {
-		http.Error(w, "Streaming unsupported", http.StatusInternalServerError)
-		return
-	}
-
-	enableSSE(w)
-	flusher.Flush()
-
-	ch := make(chan *pb.Request, 100)
-	hub.RegisterServerWeb(name, ch)
-	defer hub.UnregisterServerWeb(name, ch)
-
-	ticker := time.NewTicker(30 * time.Second)
-	defer ticker.Stop()
-
-	for {
-		select {
-		case req := <-ch:
-			payload, err := json.Marshal(req)
-			if err != nil {
-				continue
-			}
-			_, err = fmt.Fprintf(w, "data: %s\n\n", payload)
-			if err != nil {
-				return
-			}
-			flusher.Flush()
-		case <-ticker.C:
-			_, err := fmt.Fprintf(w, ": ping\n\n")
-			if err != nil {
-				return
-			}
-			flusher.Flush()
-		case <-r.Context().Done():
-			return
-		}
-	}
-}
-
-// serverSendHandler forwards messages sent from Server Web Panel to client gRPC streams
-func serverSendHandler(w http.ResponseWriter, r *http.Request) {
-	if r.Method != http.MethodPost {
-		http.Error(w, "POST required", http.StatusMethodNotAllowed)
-		return
-	}
-
-	var req struct {
-		Server string `json:"server"`
-		Client string `json:"client"`
-		Text   string `json:"text"`
-	}
-
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		http.Error(w, err.Error(), http.StatusBadRequest)
-		return
-	}
-
-	if req.Server == "" || req.Client == "" || req.Text == "" {
-		http.Error(w, "server, client, and text required", http.StatusBadRequest)
-		return
-	}
-
-	ok := hub.SendToGrpcClient(req.Client, &pb.Response{
-		Server: req.Server,
-		Text:   req.Text,
-	})
-
-	if !ok {
-		http.Error(w, "No active gRPC connection found for target client", http.StatusNotFound)
+		http.Error(w, "No active connection found for this user in the room", http.StatusNotFound)
 		return
 	}
 
@@ -382,26 +304,24 @@ func serverSendHandler(w http.ResponseWriter, r *http.Request) {
 }
 
 func main() {
-	// Start gRPC TCP Listener
+	// 1. Start gRPC Listener
 	lis, err := net.Listen("tcp", ":50051")
 	if err != nil {
-		log.Fatalf("Failed to listen on 50051: %v", err)
+		log.Fatalf("Failed to listen on gRPC port 50051: %v", err)
 	}
 
 	grpcServer := grpc.NewServer()
 	pb.RegisterChatServiceServer(grpcServer, &server{})
 	log.Println("gRPC Server is running on port 50051")
 
-	// Set up HTTP Server
+	// 2. Set up HTTP Web Server
 	subFS, err := fs.Sub(staticFS, "static")
 	if err != nil {
 		log.Fatalf("Failed to sub-embed static folder: %v", err)
 	}
 	http.Handle("/", http.FileServer(http.FS(subFS)))
-	http.HandleFunc("/api/client/events", clientEventsHandler)
-	http.HandleFunc("/api/client/send", clientSendHandler)
-	http.HandleFunc("/api/server/events", serverEventsHandler)
-	http.HandleFunc("/api/server/send", serverSendHandler)
+	http.HandleFunc("/api/chat/events", chatEventsHandler)
+	http.HandleFunc("/api/chat/send", chatSendHandler)
 
 	go func() {
 		log.Println("Web Server starting on http://localhost:8080")
@@ -410,7 +330,7 @@ func main() {
 		}
 	}()
 
-	// Unified Terminal input reader (broadcasts OS Stdin input to all active client streams)
+	// 3. Admin Terminal console broadcasts to all active rooms/users
 	go func() {
 		scanner := bufio.NewScanner(os.Stdin)
 		fmt.Print("Server > ")
@@ -420,31 +340,34 @@ func main() {
 				continue
 			}
 			res := &pb.Response{
-				Server: "harsha",
+				Server: "[Admin Broadcast]",
 				Text:   text,
 			}
 			
 			hub.mu.Lock()
 			sentCount := 0
-			for _, ch := range hub.grpcServerSendChans {
-				select {
-				case ch <- res:
-					sentCount++
-				default:
+			for passkey, members := range hub.rooms {
+				for _, m := range members {
+					select {
+					case m.SendChan <- res:
+						sentCount++
+					default:
+					}
 				}
+				log.Printf("[CONSOLE] Admin message broadcasted to room '%s'", passkey)
 			}
 			hub.mu.Unlock()
 
 			if sentCount > 0 {
-				log.Printf("Broadcasted terminal text to %d clients", sentCount)
+				log.Printf("[CONSOLE] Broadcasted admin text to %d total client streams", sentCount)
 			} else {
-				log.Println("No active clients connected to receive terminal input")
+				log.Println("[CONSOLE] No active clients in any room to receive message")
 			}
 			fmt.Print("Server > ")
 		}
 	}()
 
-	// Serve gRPC Server (blocking call)
+	// Block on serving gRPC
 	if err := grpcServer.Serve(lis); err != nil {
 		log.Fatalf("gRPC Server failed to serve: %v", err)
 	}

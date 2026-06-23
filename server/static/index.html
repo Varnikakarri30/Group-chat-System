@@ -3,8 +3,8 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <meta name="description" content="A premium, dark-themed dashboard demonstrating Go gRPC bidirectional streaming chat client and server interactions simultaneously in a split-screen viewport.">
-    <title>gRPC Bidirectional Chat Demo</title>
+    <meta name="description" content="A premium, dark-themed group chat application utilizing Go and gRPC bidirectional streaming with secure room passkeys.">
+    <title>gRPC Passkey Group Chat</title>
     <!-- Outfit Font from Google Fonts -->
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -21,30 +21,30 @@
     </div>
 
     <main class="app-container">
-        <!-- 1. Name Entry Setup Screen -->
+        <!-- 1. Login/Authentication Screen -->
         <section id="setup-screen" class="glass-card fade-in">
             <header class="setup-header">
                 <div class="grpc-logo-container">
-                    <span class="grpc-logo-text">gRPC</span>
+                    <span class="grpc-logo-text">gRPC AUTH</span>
                 </div>
-                <h1>Scratch Chat Demo</h1>
-                <p>Enter client and server names to launch the live bidirectional streaming demo workspace.</p>
+                <h1>Join Group Chat</h1>
+                <p>Enter your username and a secret passkey. All users entering the same passkey will join the same room.</p>
             </header>
 
             <form id="setup-form" class="setup-form">
                 <div class="form-row">
                     <div class="input-group">
-                        <label for="client-name-input">Client User Name</label>
-                        <input type="text" id="client-name-input" placeholder="e.g. Varnikahh" value="Varnikahh" required autocomplete="off">
+                        <label for="username-input">User Name</label>
+                        <input type="text" id="username-input" placeholder="e.g. Varnikahh" value="Varnikahh" required autocomplete="off">
                     </div>
                     <div class="input-group">
-                        <label for="server-name-input">Server Operator Name</label>
-                        <input type="text" id="server-name-input" placeholder="e.g. harsha" value="harsha" required autocomplete="off">
+                        <label for="passkey-input">Room Passkey</label>
+                        <input type="text" id="passkey-input" placeholder="e.g. secret123" value="secret123" required autocomplete="off">
                     </div>
                 </div>
 
                 <button type="submit" id="btn-launch-demo" class="btn-primary">
-                    <span>Initialize Bidirectional Stream</span>
+                    <span>Enter Chatroom</span>
                     <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
                         <line x1="5" y1="12" x2="19" y2="12"></line>
                         <polyline points="12 5 19 12 12 19"></polyline>
@@ -53,89 +53,51 @@
             </form>
         </section>
 
-        <!-- 2. Dual Chat Panel Workspace (Hidden initially) -->
+        <!-- 2. Consolidated Chat Panel Workspace -->
         <section id="workspace-screen" class="workspace-screen hidden">
             <!-- Header bar with status indicators -->
             <header class="workspace-header glass-card">
                 <div class="brand">
-                    <span class="badge-grpc">gRPC Bidirectional</span>
-                    <h2>Streaming Environment</h2>
+                    <span class="badge-grpc" id="room-badge">ROOM: secret123</span>
+                    <h2 id="user-badge">User: Varnikahh</h2>
                 </div>
                 <div class="status-panel">
-                    <div class="status-badge" id="client-status">
+                    <div class="status-badge" id="chat-status">
                         <span class="status-dot pulse-red"></span>
-                        <span class="status-label">Client Stream: Connecting</span>
-                    </div>
-                    <div class="status-divider"></div>
-                    <div class="status-badge" id="server-status">
-                        <span class="status-dot pulse-red"></span>
-                        <span class="status-label">Server Gateway: Connecting</span>
+                        <span class="status-label">Stream: Offline</span>
                     </div>
                     <div class="status-divider"></div>
                     <button id="btn-disconnect" class="btn-secondary">
-                        Disconnect
+                        Leave Room
                     </button>
                 </div>
             </header>
 
-            <!-- Dual Columns Layout -->
-            <div class="chat-grid">
-                <!-- Column Left: CLIENT VIEW -->
-                <div class="chat-column glass-card" id="client-column">
+            <!-- Single Column Group Chat Panel -->
+            <div class="chat-container-centered">
+                <div class="chat-column glass-card" id="chat-panel">
                     <div class="column-header">
                         <div class="header-info">
-                            <span class="badge badge-client">CLIENT PANEL</span>
-                            <h3 id="client-title-display">Client: Varnikahh</h3>
+                            <span class="badge badge-group">GROUP CONVERSATION</span>
+                            <h3 id="chat-title-display">Room Feed</h3>
                         </div>
-                        <span class="connection-status-pill green-glow" id="client-pill">ACTIVE</span>
+                        <span class="connection-status-pill green-glow" id="chat-pill">ACTIVE</span>
                     </div>
                     
-                    <div class="chat-console" id="client-console">
+                    <div class="chat-console" id="chat-console">
                         <div class="terminal-welcome">
-                            <span class="term-prompt">$</span> init --role client --user <span class="client-name-bold" id="client-term-name">Varnikahh</span>
+                            <span class="term-prompt">$</span> connect --user <span class="client-name-bold" id="term-username">Varnikahh</span> --room <span class="server-name-bold" id="term-room">secret123</span>
                             <br>
-                            <span class="term-response">[OK] Established gRPC Bidirectional channel stream.</span>
+                            <span class="term-response">[OK] gRPC Bidirectional Stream active. Welcome to the group chat!</span>
                         </div>
-                        <div class="messages-container" id="client-messages">
+                        <div class="messages-container" id="chat-messages">
                             <!-- Messages populated dynamically -->
                         </div>
                     </div>
 
-                    <form id="client-message-form" class="message-input-area">
-                        <input type="text" id="client-message-input" placeholder="Type a request message to send as client..." required autocomplete="off">
-                        <button type="submit" class="btn-send btn-send-client" title="Send Client Message">
-                            <svg class="send-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                                <line x1="22" y1="2" x2="11" y2="13"></line>
-                                <polygon points="22 2 15 22 11 13 2 9 22 2"></polygon>
-                            </svg>
-                        </button>
-                    </form>
-                </div>
-
-                <!-- Column Right: SERVER VIEW -->
-                <div class="chat-column glass-card" id="server-column">
-                    <div class="column-header">
-                        <div class="header-info">
-                            <span class="badge badge-server">SERVER PANEL</span>
-                            <h3 id="server-title-display">Server: harsha</h3>
-                        </div>
-                        <span class="connection-status-pill green-glow" id="server-pill">ACTIVE</span>
-                    </div>
-
-                    <div class="chat-console" id="server-console">
-                        <div class="terminal-welcome">
-                            <span class="term-prompt">#</span> listen --port 50051 --operator <span class="server-name-bold" id="server-term-name">harsha</span>
-                            <br>
-                            <span class="term-response">[OK] Listening for bidirectional stream calls on port 50051...</span>
-                        </div>
-                        <div class="messages-container" id="server-messages">
-                            <!-- Messages populated dynamically -->
-                        </div>
-                    </div>
-
-                    <form id="server-message-form" class="message-input-area">
-                        <input type="text" id="server-message-input" placeholder="Type a response message to stream as server..." required autocomplete="off">
-                        <button type="submit" class="btn-send btn-send-server" title="Send Server Message">
+                    <form id="chat-message-form" class="message-input-area">
+                        <input type="text" id="chat-message-input" placeholder="Type a message to stream to the group..." required autocomplete="off">
+                        <button type="submit" class="btn-send btn-send-client" title="Send Message">
                             <svg class="send-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                                 <line x1="22" y1="2" x2="11" y2="13"></line>
                                 <polygon points="22 2 15 22 11 13 2 9 22 2"></polygon>

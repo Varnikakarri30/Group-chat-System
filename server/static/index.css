@@ -4,10 +4,8 @@
     --bg-card: rgba(13, 11, 26, 0.55);
     --bg-terminal: rgba(6, 5, 12, 0.8);
     --border-color: rgba(255, 255, 255, 0.08);
-    --border-glow-purple: rgba(168, 85, 247, 0.3);
-    --border-glow-cyan: rgba(6, 182, 212, 0.3);
     
-    /* Harmonious HSL colors */
+    /* HSL Colors */
     --purple: #a855f7;
     --purple-glow: rgba(168, 85, 247, 0.4);
     --cyan: #06b6d4;
@@ -155,7 +153,7 @@ body {
 }
 
 .fade-in {
-    animation: message-pop 0.5s cubic-bezier(0.4, 0, 0.2, 1) forwards;
+    animation: message-pop 0.4s cubic-bezier(0.4, 0, 0.2, 1) forwards;
 }
 
 /* Glassmorphism Containers */
@@ -170,7 +168,7 @@ body {
 
 .app-container {
     width: 92%;
-    max-width: 1400px;
+    max-width: 900px;
     margin: 20px auto;
     z-index: 10;
 }
@@ -178,7 +176,7 @@ body {
 /* Setup Screen */
 #setup-screen {
     max-width: 600px;
-    margin: 8vh auto;
+    margin: 10vh auto;
     padding: 40px;
     border: 1px solid rgba(168, 85, 247, 0.2);
     box-shadow: 0 25px 60px -15px rgba(168, 85, 247, 0.1);
@@ -318,14 +316,18 @@ body {
 .workspace-header .brand {
     display: flex;
     align-items: center;
-    gap: 12px;
+    gap: 16px;
+}
+
+#room-badge {
+    text-transform: uppercase;
 }
 
 .badge-grpc {
     background: rgba(6, 182, 212, 0.15);
     color: var(--cyan);
     border: 1px solid rgba(6, 182, 212, 0.25);
-    padding: 4px 10px;
+    padding: 4px 12px;
     border-radius: 6px;
     font-size: 12px;
     font-weight: 700;
@@ -335,6 +337,7 @@ body {
 .workspace-header h2 {
     font-size: 18px;
     font-weight: 600;
+    color: #ffffff;
 }
 
 .status-panel {
@@ -396,48 +399,27 @@ body {
     color: #ef4444;
 }
 
-/* Chat Grid */
-.chat-grid {
-    display: grid;
-    grid-template-columns: 1fr 1fr;
-    gap: 20px;
+/* Centered Chat Container */
+.chat-container-centered {
+    display: flex;
+    justify-content: center;
+    align-items: stretch;
     flex-grow: 1;
-    min-height: 0; /* Important for flex-child scrolling */
-}
-
-@media (max-width: 900px) {
-    .chat-grid {
-        grid-template-columns: 1fr;
-        height: auto;
-    }
-    .workspace-screen {
-        height: auto;
-    }
+    min-height: 0;
+    width: 100%;
 }
 
 .chat-column {
     display: flex;
     flex-direction: column;
+    width: 100%;
     height: 100%;
-    min-height: 450px;
     overflow: hidden;
     transition: var(--transition-smooth);
-}
-
-#client-column {
-    border-color: rgba(6, 182, 212, 0.15);
-}
-
-#client-column:focus-within {
-    border-color: var(--cyan);
-    box-shadow: 0 10px 40px -10px rgba(6, 182, 212, 0.15);
-}
-
-#server-column {
     border-color: rgba(168, 85, 247, 0.15);
 }
 
-#server-column:focus-within {
+.chat-column:focus-within {
     border-color: var(--purple);
     box-shadow: 0 10px 40px -10px rgba(168, 85, 247, 0.15);
 }
@@ -465,12 +447,7 @@ body {
     letter-spacing: 1px;
 }
 
-.badge-client {
-    background: rgba(6, 182, 212, 0.15);
-    color: var(--cyan);
-}
-
-.badge-server {
+.badge-group {
     background: rgba(168, 85, 247, 0.15);
     color: var(--purple);
 }
@@ -555,7 +532,7 @@ body {
 .message-wrapper {
     display: flex;
     flex-direction: column;
-    max-width: 80%;
+    max-width: 70%;
     margin-bottom: 4px;
 }
 
@@ -568,6 +545,14 @@ body {
 .message-wrapper.inbound {
     align-self: flex-start;
     align-items: flex-start;
+}
+
+/* Special styling for server broadcasts */
+.message-wrapper.admin-broadcast {
+    align-self: center;
+    align-items: center;
+    max-width: 90%;
+    margin: 10px 0;
 }
 
 .msg-meta {
@@ -587,34 +572,30 @@ body {
     box-shadow: 0 4px 10px rgba(0, 0, 0, 0.25);
 }
 
-/* Client styles */
-#client-column .message-wrapper.outbound .message-bubble {
+/* Outbound (Self) bubble styles */
+.message-wrapper.outbound .message-bubble {
     background: linear-gradient(135deg, #0891b2, #0284c7);
     color: #ffffff;
     border-bottom-right-radius: 2px;
     border: 1px solid rgba(6, 182, 212, 0.2);
 }
 
-#client-column .message-wrapper.inbound .message-bubble {
+/* Inbound (Others) bubble styles */
+.message-wrapper.inbound .message-bubble {
     background: rgba(255, 255, 255, 0.06);
     color: var(--text-main);
     border-bottom-left-radius: 2px;
     border: 1px solid rgba(255, 255, 255, 0.05);
 }
 
-/* Server styles */
-#server-column .message-wrapper.outbound .message-bubble {
-    background: linear-gradient(135deg, #8b5cf6, #7c3aed);
+/* Admin Broadcast alert styling */
+.message-wrapper.admin-broadcast .message-bubble {
+    background: rgba(168, 85, 247, 0.1);
     color: #ffffff;
-    border-bottom-right-radius: 2px;
-    border: 1px solid rgba(168, 85, 247, 0.2);
-}
-
-#server-column .message-wrapper.inbound .message-bubble {
-    background: rgba(255, 255, 255, 0.06);
-    color: var(--text-main);
-    border-bottom-left-radius: 2px;
-    border: 1px solid rgba(255, 255, 255, 0.05);
+    border: 1px dashed var(--purple);
+    font-family: var(--font-mono);
+    font-size: 13px;
+    text-align: center;
 }
 
 .msg-time {
@@ -663,14 +644,6 @@ body {
 .message-input-area input:focus {
     outline: none;
     background: rgba(0, 0, 0, 0.45);
-}
-
-#client-column .message-input-area input:focus {
-    border-color: var(--cyan);
-    box-shadow: 0 0 10px rgba(6, 182, 212, 0.2);
-}
-
-#server-column .message-input-area input:focus {
     border-color: var(--purple);
     box-shadow: 0 0 10px rgba(168, 85, 247, 0.2);
 }
@@ -693,15 +666,7 @@ body {
     height: 18px;
 }
 
-#client-column .btn-send:hover {
-    background: var(--cyan);
-    border-color: var(--cyan);
-    color: #ffffff;
-    box-shadow: 0 0 15px rgba(6, 182, 212, 0.4);
-    transform: translateY(-1px);
-}
-
-#server-column .btn-send:hover {
+.btn-send:hover {
     background: var(--purple);
     border-color: var(--purple);
     color: #ffffff;
