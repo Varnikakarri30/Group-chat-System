@@ -1,0 +1,152 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="description" content="A premium, dark-themed dashboard demonstrating Go gRPC bidirectional streaming chat client and server interactions simultaneously in a split-screen viewport.">
+    <title>gRPC Bidirectional Chat Demo</title>
+    <!-- Outfit Font from Google Fonts -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="index.css">
+</head>
+<body>
+    <!-- Abstract Glowing Background Blob Patterns -->
+    <div class="abstract-background">
+        <div class="blob blob-purple"></div>
+        <div class="blob blob-cyan"></div>
+        <div class="blob blob-pink"></div>
+        <div class="grid-overlay"></div>
+    </div>
+
+    <main class="app-container">
+        <!-- 1. Name Entry Setup Screen -->
+        <section id="setup-screen" class="glass-card fade-in">
+            <header class="setup-header">
+                <div class="grpc-logo-container">
+                    <span class="grpc-logo-text">gRPC</span>
+                </div>
+                <h1>Scratch Chat Demo</h1>
+                <p>Enter client and server names to launch the live bidirectional streaming demo workspace.</p>
+            </header>
+
+            <form id="setup-form" class="setup-form">
+                <div class="form-row">
+                    <div class="input-group">
+                        <label for="client-name-input">Client User Name</label>
+                        <input type="text" id="client-name-input" placeholder="e.g. Varnikahh" value="Varnikahh" required autocomplete="off">
+                    </div>
+                    <div class="input-group">
+                        <label for="server-name-input">Server Operator Name</label>
+                        <input type="text" id="server-name-input" placeholder="e.g. harsha" value="harsha" required autocomplete="off">
+                    </div>
+                </div>
+
+                <button type="submit" id="btn-launch-demo" class="btn-primary">
+                    <span>Initialize Bidirectional Stream</span>
+                    <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                        <line x1="5" y1="12" x2="19" y2="12"></line>
+                        <polyline points="12 5 19 12 12 19"></polyline>
+                    </svg>
+                </button>
+            </form>
+        </section>
+
+        <!-- 2. Dual Chat Panel Workspace (Hidden initially) -->
+        <section id="workspace-screen" class="workspace-screen hidden">
+            <!-- Header bar with status indicators -->
+            <header class="workspace-header glass-card">
+                <div class="brand">
+                    <span class="badge-grpc">gRPC Bidirectional</span>
+                    <h2>Streaming Environment</h2>
+                </div>
+                <div class="status-panel">
+                    <div class="status-badge" id="client-status">
+                        <span class="status-dot pulse-red"></span>
+                        <span class="status-label">Client Stream: Connecting</span>
+                    </div>
+                    <div class="status-divider"></div>
+                    <div class="status-badge" id="server-status">
+                        <span class="status-dot pulse-red"></span>
+                        <span class="status-label">Server Gateway: Connecting</span>
+                    </div>
+                    <div class="status-divider"></div>
+                    <button id="btn-disconnect" class="btn-secondary">
+                        Disconnect
+                    </button>
+                </div>
+            </header>
+
+            <!-- Dual Columns Layout -->
+            <div class="chat-grid">
+                <!-- Column Left: CLIENT VIEW -->
+                <div class="chat-column glass-card" id="client-column">
+                    <div class="column-header">
+                        <div class="header-info">
+                            <span class="badge badge-client">CLIENT PANEL</span>
+                            <h3 id="client-title-display">Client: Varnikahh</h3>
+                        </div>
+                        <span class="connection-status-pill green-glow" id="client-pill">ACTIVE</span>
+                    </div>
+                    
+                    <div class="chat-console" id="client-console">
+                        <div class="terminal-welcome">
+                            <span class="term-prompt">$</span> init --role client --user <span class="client-name-bold" id="client-term-name">Varnikahh</span>
+                            <br>
+                            <span class="term-response">[OK] Established gRPC Bidirectional channel stream.</span>
+                        </div>
+                        <div class="messages-container" id="client-messages">
+                            <!-- Messages populated dynamically -->
+                        </div>
+                    </div>
+
+                    <form id="client-message-form" class="message-input-area">
+                        <input type="text" id="client-message-input" placeholder="Type a request message to send as client..." required autocomplete="off">
+                        <button type="submit" class="btn-send btn-send-client" title="Send Client Message">
+                            <svg class="send-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                <line x1="22" y1="2" x2="11" y2="13"></line>
+                                <polygon points="22 2 15 22 11 13 2 9 22 2"></polygon>
+                            </svg>
+                        </button>
+                    </form>
+                </div>
+
+                <!-- Column Right: SERVER VIEW -->
+                <div class="chat-column glass-card" id="server-column">
+                    <div class="column-header">
+                        <div class="header-info">
+                            <span class="badge badge-server">SERVER PANEL</span>
+                            <h3 id="server-title-display">Server: harsha</h3>
+                        </div>
+                        <span class="connection-status-pill green-glow" id="server-pill">ACTIVE</span>
+                    </div>
+
+                    <div class="chat-console" id="server-console">
+                        <div class="terminal-welcome">
+                            <span class="term-prompt">#</span> listen --port 50051 --operator <span class="server-name-bold" id="server-term-name">harsha</span>
+                            <br>
+                            <span class="term-response">[OK] Listening for bidirectional stream calls on port 50051...</span>
+                        </div>
+                        <div class="messages-container" id="server-messages">
+                            <!-- Messages populated dynamically -->
+                        </div>
+                    </div>
+
+                    <form id="server-message-form" class="message-input-area">
+                        <input type="text" id="server-message-input" placeholder="Type a response message to stream as server..." required autocomplete="off">
+                        <button type="submit" class="btn-send btn-send-server" title="Send Server Message">
+                            <svg class="send-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                <line x1="22" y1="2" x2="11" y2="13"></line>
+                                <polygon points="22 2 15 22 11 13 2 9 22 2"></polygon>
+                            </svg>
+                        </button>
+                    </form>
+                </div>
+            </div>
+        </section>
+    </main>
+
+    <script src="index.js"></script>
+</body>
+</html>
